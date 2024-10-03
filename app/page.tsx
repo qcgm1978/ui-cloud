@@ -1,101 +1,192 @@
-import Image from "next/image";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-expressions */
+"use client";
 
-export default function Home() {
+import React, { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import cloud from "d3-cloud";
+
+interface WordFrequency {
+  text: string;
+  value: number;
+}
+
+interface CommentData {
+  step: number;
+  wordFrequencies: WordFrequency[];
+}
+
+export default function GoGameWordCloud() {
+  const [commentData, setCommentData] = useState<CommentData[]>([]);
+  const [currentIndex, setCurrentStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [windowSize, setWindowSize] = useState({ width: 600, height: 400 });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const name = "2024-10-02-golaxy-29届LG杯世界棋王战4强-柯洁-msg";
+        const response = await fetch(
+          `https://localhost:8010/get_comment_data?address=/Users/dickphilipp/Documents/data/resource/${name}.json`
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch comment data");
+        }
+        const data = await response.json();
+        setCommentData(data);
+        setIsLoading(false);
+      } catch (err) {
+        setError("Error loading comment data. Please try again later.");
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({
+        width: Math.min(window.innerWidth * 0.8, 800),
+        height: Math.min(window.innerHeight * 0.6, 600),
+      });
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isPlaying && commentData.length > 0) {
+      timer = setInterval(() => {
+        setCurrentStep((prevStep) => (prevStep + 1) % commentData.length);
+      }, 3000); // 每3秒切换一次
+    }
+    return () => clearInterval(timer);
+  }, [isPlaying, commentData]);
+
+  useEffect(() => {
+    if (!canvasRef.current || commentData.length === 0) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const wordFrequencies = commentData[currentIndex].wordFrequencies
+
+    const maxFrequency = Math.max(...wordFrequencies.map(w => w.value))
+    const minFrequency = Math.min(...wordFrequencies.map(w => w.value))
+
+    const sizeScale = (freq: number) => {
+      // 将词频映射到 20-100 的范围
+      return 20 + (freq - minFrequency) / (maxFrequency - minFrequency) * 80
+    }
+
+    cloud()
+      .size([windowSize.width, windowSize.height])
+      .words(wordFrequencies.map(w => ({
+        text: w.text,
+        size: sizeScale(w.value)
+      })))
+      .padding(5)
+      .rotate(() => (~~(Math.random() * 6) - 3) * 30)
+      .font("Arial")
+      .fontSize(d => d.size!)
+      .on("end", (words) => {
+        ctx.clearRect(0, 0, windowSize.width, windowSize.height)
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        words.forEach((word: any) => {
+          const { x, y, size, text } = word
+          ctx.font = `${size}px Arial`
+          ctx.fillStyle = `hsl(${Math.random() * 360}, 70%, 50%)`
+          ctx.fillText(text, x + windowSize.width / 2, y + windowSize.height / 2)
+        })
+      })
+      .start()
+  }, [currentIndex, windowSize, commentData])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-2xl font-bold">加载中...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-2xl font-bold text-red-500">{error}</div>
+      </div>
+    )
+  }
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-2xl font-bold">加载中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-2xl font-bold text-red-500">{error}</div>
+      </div>
+    );
+  }
+
+  if (commentData.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-2xl font-bold">暂无评论数据</div>
+      </div>
+    );
+  }
+  const currentData = commentData[currentIndex]
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <h2 className="text-2xl font-bold mb-4">
+        围棋评论单词云 - 第 {currentData.step} 步
+      </h2>
+      <div
+        className="bg-white rounded-lg shadow-lg p-4"
+        style={{ width: windowSize.width, height: windowSize.height }}
+      >
+        <canvas
+          ref={canvasRef}
+          width={windowSize.width}
+          height={windowSize.height}
         />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+      </div>
+      <div className="mt-4 space-x-2">
+        <Button onClick={() => setIsPlaying(!isPlaying)}>
+          {isPlaying ? "暂停" : "继续"}
+        </Button>
+        <Button
+          onClick={() =>
+            setCurrentStep(
+              (prevStep) =>
+                (prevStep - 1 + commentData.length) % commentData.length
+            )
+          }
         >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          上一步
+        </Button>
+        <Button
+          onClick={() =>
+            setCurrentStep((prevStep) => (prevStep + 1) % commentData.length)
+          }
         >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          下一步
+        </Button>
+      </div>
     </div>
   );
 }
