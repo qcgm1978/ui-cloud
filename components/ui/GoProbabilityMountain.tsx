@@ -1,7 +1,7 @@
-import React, { useRef, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Text } from '@react-three/drei';
-import * as THREE from 'three';
+import React, { useRef, useEffect } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { OrbitControls, Text } from "@react-three/drei";
+import * as THREE from "three";
 
 interface MoveData {
   coord: string;
@@ -17,8 +17,8 @@ const BoardSize = 19;
 const MountainHeight = 5;
 
 const coordToPosition = (coord: string): [number, number] => {
-  const [col, row] = coord.split('');
-  const x = col.charCodeAt(0) - 'A'.charCodeAt(0) - 9;
+  const [col, row] = coord.split("");
+  const x = col.charCodeAt(0) - "A".charCodeAt(0) - 9;
   const z = BoardSize - parseInt(row);
   return [x, z];
 };
@@ -45,8 +45,11 @@ const Mountain: React.FC<{ moveData: MoveData[] }> = ({ moveData }) => {
       colors.push(color.r, color.g, color.b);
     });
 
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(vertices, 3)
+    );
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
       size: 0.5, // 增加点的大小以确保所有点都可见
@@ -77,10 +80,13 @@ const Mountain: React.FC<{ moveData: MoveData[] }> = ({ moveData }) => {
   );
 };
 
-const GoProbabilityMountain: React.FC<GoProbabilityMountainProps> = ({ moveData }) => {
+const GoProbabilityMountain: React.FC<GoProbabilityMountainProps> = ({
+  moveData,
+}) => {
   return (
-    <div style={{ width: '100%', height: '600px' }}>
+    <div style={{ width: "100%", height: "600px" }}>
       <Canvas camera={{ position: [0, 15, 20], fov: 60 }}>
+        {/* // 调整相机位置和视野 */}
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} />
         <Mountain moveData={moveData} />
