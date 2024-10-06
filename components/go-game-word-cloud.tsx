@@ -59,7 +59,7 @@ export function GoGameWordCloud() {
       .padding(5)
       .rotate(() => (~~(Math.random() * 6) - 3) * 30)
       .font("Arial")
-      .fontSize(d => d.size)
+      .fontSize(d => d.size?? 0)
       .on("end", (words) => {
         ctx.clearRect(0, 0, windowSize.width, windowSize.height)
         ctx.textAlign = "center"
@@ -68,7 +68,7 @@ export function GoGameWordCloud() {
           const { x, y, size, text } = word
           ctx.font = `${size}px Arial`
           ctx.fillStyle = `hsl(${Math.random() * 360}, 70%, 50%)`
-          ctx.fillText(text, x + windowSize.width / 2, y + windowSize.height / 2)
+          ctx.fillText(text?? '', x?? 0 + windowSize.width / 2, y?? 0 + windowSize.height / 2)
         })
       })
       .start()

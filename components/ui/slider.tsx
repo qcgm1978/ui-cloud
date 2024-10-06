@@ -4,7 +4,7 @@ interface SliderProps extends React.InputHTMLAttributes<HTMLInputElement> {
   min: number;
   max: number;
   step: number;
-  value: number[];
+  value: number| string;
   onValueChange: (value: number[]) => void;
 }
 
@@ -21,7 +21,7 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
         min={min}
         max={max}
         step={step}
-        value={value[0]}
+        value={typeof value === 'number' ? value : 0} // Ensure value is a number
         onChange={handleChange}
         className={`w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer ${className}`}
         {...props}

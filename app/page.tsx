@@ -53,7 +53,7 @@ export default function GoGameWordCloud() {
       try {
         const name = "2024-10-02-golaxy-29届LG杯世界棋王战4强-柯洁-msg";
         const response = await fetch(
-          `https://localhost:8010/get_comment_data?address=/Users/dickphilipp/Documents/data/resource/${name}.json`
+          `http://localhost:8010/get_comment_data?address=/Users/dickphilipp/Documents/data/resource/${name}.json`
         );
         if (!response.ok) {
           throw new Error("Failed to fetch comment data");
