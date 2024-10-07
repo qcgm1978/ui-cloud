@@ -1,3 +1,4 @@
+
 /* eslint-disable prefer-const */
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
@@ -16,7 +17,7 @@ const GoAnalysisPage: React.FC = () => {
     const fetchData = async () => {
       const name = "2024-10-02-golaxy-29届LG杯世界棋王战4强-柯洁";
       const response = await fetch(
-        `https://localhost:8010/get_file?address=/Users/dickphilipp/Documents/data/resource/${name}.json`
+        `http://localhost:8010/get_file?address=/Users/dickphilipp/Documents/data/resource/${name}.json`
       ); // 假设您有一个API端点
       const data = await response.json();
       const reportData = data[1]["report"]["reportData"];
