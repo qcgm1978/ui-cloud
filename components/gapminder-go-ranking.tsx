@@ -45,7 +45,7 @@ const GapminderGoRankingComponent = React.memo(() => {
         return
       }
 
-      yearsRef.current = headers.slice(4).filter((year): year is string => year !== null)
+      yearsRef.current = headers.slice(5).filter((year): year is string => year !== null)
       console.log("Years:", yearsRef.current)
 
       const processedData = yearsRef.current.reduce((acc, year) => {
@@ -57,7 +57,7 @@ const GapminderGoRankingComponent = React.memo(() => {
             num: parseInt(row[3] || '0'),
             rating: row[headers.indexOf(year)] !== null ? Number(row[headers.indexOf(year)]) : null
           }))
-          .filter(player => player.rating !== null && !isNaN(player.rating))
+          .filter(player => player.rating && !isNaN(player.rating))
           .sort((a, b) => (b.rating as number) - (a.rating as number))
           .slice(0, 20)
 
