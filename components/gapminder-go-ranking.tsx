@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useRef, useEffect, useState, useCallback } from 'react'
-import * as d3 from 'd3'
+import { select, scalePoint, scaleLinear, scaleOrdinal, min, max, axisBottom, axisLeft, forceSimulation, forceX, forceY, forceCollide } from 'd3'
+import { schemeCategory10 } from 'd3-scale-chromatic'
 import { Howl } from 'howler'
 import { Slider } from "@/components/ui/slider"
 import { Button } from "@/components/ui/button"
@@ -11,22 +12,27 @@ interface GoPlayer {
   yearsListed: number
   img: string
   num: number
-  [year: string]: string | number | null
+  rating: number | null
 }
 
-export function GapminderGoRankingComponent() {
+const GapminderGoRankingComponent = React.memo(() => {
+  console.log("Rendering GapminderGoRankingComponent")
+
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const soundRef = useRef<Howl | null>(null)
   const yearsRef = useRef<string[]>([])
   const currentYearIndexRef = useRef(0)
   const [goData, setGoData] = useState<GoPlayer[]>([])
-  const [animationSpeed, setAnimationSpeed] = useState(1000)
+  const [animationSpeed, setAnimationSpeed] = useState(2000)
+  const [currentYear, setCurrentYear] = useState<string>('')
 
   const fetchData = useCallback(async () => {
     try {
+      console.log("Fetching data...")
       const response = await fetch('http://localhost:8010/get_ratings_csv')
       const data: (string | null)[][] = await response.json()
+      console.log("Received data:", data)
       
       if (!data || data.length < 2) {
         console.error('Invalid data format')
@@ -39,122 +45,156 @@ export function GapminderGoRankingComponent() {
         return
       }
 
-      const playerData = data.slice(1).map(row => {
-        if (!row) return null
-        const player: GoPlayer = {
-          name: row[0] || '',
-          yearsListed: parseInt(row[1] || '0'),
-          img: row[2] || '',
-          num: parseInt(row[3] || '0')
-        }
-        headers.slice(4).forEach((year, index) => {
-          if (year) {
-            player[year] = row[index + 4] !== null ? Number(row[index + 4]) : null
-          }
-        })
-        return player
-      }).filter((player): player is GoPlayer => player !== null)
+      yearsRef.current = headers.slice(4).filter((year): year is string => year !== null)
+      console.log("Years:", yearsRef.current)
 
-      setGoData(playerData)
-      yearsRef.current = headers.slice(5).filter((year): year is string => year !== null)
+      const processedData = yearsRef.current.reduce((acc, year) => {
+        const yearData = data.slice(1)
+          .map((row, index) => ({
+            name: row[0] || '',
+            yearsListed: parseInt(row[1] || '0'),
+            img: row[2] || '',
+            num: parseInt(row[3] || '0'),
+            rating: row[headers.indexOf(year)] !== null ? Number(row[headers.indexOf(year)]) : null
+          }))
+          .filter(player => player.rating !== null && !isNaN(player.rating))
+          .sort((a, b) => (b.rating as number) - (a.rating as number))
+          .slice(0, 20)
+
+        acc[year] = yearData
+        return acc
+      }, {} as Record<string, GoPlayer[]>)
+
+      console.log("Processed data:", processedData)
+      setGoData(processedData)
     } catch (error) {
       console.error('Error fetching data:', error)
     }
   }, [])
 
   const updateChart = useCallback((year: string) => {
-    if (!svgRef.current || goData.length === 0) return
+    console.log("Updating chart for year:", year)
+    if (!svgRef.current || !goData[year]) {
+      console.log("SVG ref or data not available")
+      return
+    }
 
-    const svg = d3.select(svgRef.current)
+    const svg = select(svgRef.current)
     const width = window.innerWidth
     const height = window.innerHeight
     const margin = { top: 20, right: 20, bottom: 50, left: 40 }
 
-    const x = d3.scalePoint()
+    const yearData = goData[year]
+
+    const allRatings = yearData.map(player => player.rating as number)
+
+    const minRating = min(allRatings) || 0
+    const maxRating = max(allRatings) || 0
+
+    const x = scalePoint()
       .range([margin.left, width - margin.right])
       .domain(yearsRef.current)
 
-    const allRatings = goData.flatMap(player => 
-      yearsRef.current.map(year => Number(player[year]))
-    ).filter(rating => rating !== null && !isNaN(rating))
-
-    const y = d3.scaleLinear()
+    const y = scaleLinear()
       .range([height - margin.bottom, margin.top])
-      .domain([d3.min(allRatings) || 0, d3.max(allRatings) || 0])
+      .domain([minRating, maxRating])
+      .nice()
 
-    const r = d3.scaleLinear()
+    const r = scaleLinear()
       .range([5, 40])
-      .domain([d3.min(allRatings) || 0, d3.max(allRatings) || 0])
+      .domain([minRating, maxRating])
 
-    const color = d3.scaleOrdinal(d3.schemeCategory10)
+    const color = scaleOrdinal(schemeCategory10)
 
-    const yearData = goData.filter(d => d[year] !== undefined && d[year] !== null && d[year] !== "")
-
-    // Force simulation to prevent overlap
-    const simulation = d3.forceSimulation(yearData)
-      .force("x", d3.forceX((d: any) => x(year)!).strength(0.1))
-      .force("y", d3.forceY((d: any) => y(Number(d[year]))).strength(0.1))
-      .force("collide", d3.forceCollide((d: any) => r(Number(d[year])) + 1).iterations(4))
+    const simulation = forceSimulation(yearData)
+      .force("x", forceX((d: GoPlayer) => Math.max(margin.left + r(d.rating as number), Math.min(width - margin.right - r(d.rating as number), x(year) || 0))).strength(0.1))
+      .force("y", forceY((d: GoPlayer) => Math.max(margin.top + r(d.rating as number), Math.min(height - margin.bottom - r(d.rating as number), y(d.rating as number)))).strength(0.1))
+      .force("collide", forceCollide((d: GoPlayer) => r(d.rating as number) + 1).iterations(4))
       .stop()
 
     for (let i = 0; i < 120; ++i) simulation.tick()
 
-    const circles = svg.selectAll('circle')
-      .data(yearData, d => d.name)
+    // 不要清除所有旧元素
+    // svg.selectAll('*').remove()
 
-    circles.enter()
-      .append('circle')
-      .attr('r', d => r(Number(d[year])))
-      .attr('cx', (d: any) => d.x)
-      .attr('cy', (d: any) => d.y)
-      .attr('fill', d => color(d.name) as string)
-      .attr('opacity', 0.7)
-      .merge(circles as any)
-      .transition()
-      .duration(animationSpeed)
-      .attr('r', d => r(Number(d[year])))
-      .attr('cx', (d: any) => d.x)
-      .attr('cy', (d: any) => d.y)
-
-    circles.exit().remove()
-
-    const texts = svg.selectAll('text.player-name')
-      .data(yearData, d => d.name)
-
-    texts.enter()
-      .append('text')
-      .attr('class', 'player-name')
-      .attr('x', (d: any) => d.x)
-      .attr('y', (d: any) => d.y)
-      .text(d => d.name)
-      .attr('text-anchor', 'middle')
-      .attr('dy', '.3em')
-      .merge(texts as any)
-      .transition()
-      .duration(animationSpeed)
-      .attr('x', (d: any) => d.x)
-      .attr('y', (d: any) => d.y)
-
-    texts.exit().remove()
-
+    // 更新轴和标签
     svg.select('.x-axis')
-      .call(d3.axisBottom(x) as any)
+      .attr('transform', `translate(0,${height - margin.bottom})`)
+      .call(axisBottom(x) as any)
       .selectAll('text')
       .style('text-anchor', 'end')
       .attr('dx', '-.8em')
       .attr('dy', '.15em')
       .attr('transform', 'rotate(-45)')
 
-    svg.select('.y-axis').call(d3.axisLeft(y) as any)
+    svg.select('.y-axis')
+      .attr('transform', `translate(${margin.left},0)`)
+      .call(axisLeft(y).ticks(10) as any)
+      .call(g => g.select(".domain").remove())
+      .call(g => g.selectAll(".tick line").clone()
+        .attr("x2", width - margin.left - margin.right)
+        .attr("stroke-opacity", 0.1)
+      )
 
     svg.select('.year-label')
       .text(year)
+
+    // 更新玩家
+    const players = svg.selectAll<SVGGElement, GoPlayer>('g.player')
+      .data(yearData, (d: GoPlayer) => d.name)
+
+    // 移除退出的玩家
+    players.exit()
+      .transition()
+      .duration(animationSpeed)
+      .style('opacity', 0)
+      .remove()
+
+    // 添加新的玩家
+    const enterPlayers = players.enter()
+      .append('g')
+      .attr('class', 'player')
+      .attr('transform', (d: GoPlayer) => `translate(${(d as any).x},${(d as any).y})`)
+      .style('opacity', 0)
+
+    enterPlayers.append('circle')
+      .attr('r', 0)
+      .attr('fill', (d: GoPlayer) => color(d.name) as string)
+      .attr('opacity', 0.7)
+
+    enterPlayers.append('text')
+      .attr('class', 'player-name')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.3em')
+      .text((d: GoPlayer) => d.name)
+      .style('font-size', '0px')
+
+    // 更新所有玩家
+    const allPlayers = enterPlayers.merge(players)
+
+    allPlayers.transition()
+      .duration(animationSpeed)
+      .style('opacity', 1)
+      .attr('transform', (d: GoPlayer) => `translate(${(d as any).x},${(d as any).y})`)
+
+    allPlayers.select('circle')
+      .transition()
+      .duration(animationSpeed)
+      .attr('r', (d: GoPlayer) => r(d.rating as number))
+
+    allPlayers.select('text')
+      .transition()
+      .duration(animationSpeed)
+      .style('font-size', (d: GoPlayer) => `${r(d.rating as number) / 2}px`)
+
+    setCurrentYear(year)
   }, [goData, animationSpeed])
 
   useEffect(() => {
+    console.log("Fetching data...")
     fetchData()
 
-    const svg = d3.select(svgRef.current)
+    const svg = select(svgRef.current)
     const width = window.innerWidth
     const height = window.innerHeight
     const margin = { top: 20, right: 20, bottom: 50, left: 40 }
@@ -199,19 +239,19 @@ export function GapminderGoRankingComponent() {
   }, [fetchData])
 
   useEffect(() => {
-    if (goData.length > 0 && yearsRef.current.length > 0) {
+    if (Object.keys(goData).length > 0 && yearsRef.current.length > 0) {
       updateChart(yearsRef.current[0])
     }
   }, [goData, updateChart])
 
   useEffect(() => {
-    let animationId: number
+    let timeoutId: NodeJS.Timeout
 
     const animate = () => {
       if (currentYearIndexRef.current < yearsRef.current.length - 1) {
         currentYearIndexRef.current += 1
         updateChart(yearsRef.current[currentYearIndexRef.current])
-        animationId = setTimeout(animate, animationSpeed)
+        timeoutId = setTimeout(animate, animationSpeed)
       } else {
         setIsPlaying(false)
         if (soundRef.current) {
@@ -221,19 +261,17 @@ export function GapminderGoRankingComponent() {
     }
 
     if (isPlaying) {
-      animationId = setTimeout(animate, animationSpeed)
+      timeoutId = setTimeout(animate, animationSpeed)
       if (soundRef.current) {
         soundRef.current.play()
-      }
-    } else {
-      clearTimeout(animationId)
-      if (soundRef.current) {
-        soundRef.current.pause()
       }
     }
 
     return () => {
-      clearTimeout(animationId)
+      clearTimeout(timeoutId)
+      if (soundRef.current) {
+        soundRef.current.pause()
+      }
     }
   }, [isPlaying, updateChart, animationSpeed])
 
@@ -249,6 +287,7 @@ export function GapminderGoRankingComponent() {
 
   return (
     <div className="w-screen h-screen overflow-hidden">
+      <div className="text-red-500">GapminderGoRankingComponent is rendering</div>
       <svg ref={svgRef} className="w-full h-full"></svg>
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center bg-white bg-opacity-50 px-4 py-2 rounded">
         <div className="flex items-center mb-2">
@@ -260,16 +299,24 @@ export function GapminderGoRankingComponent() {
         <div className="flex items-center">
           <span className="mr-2">动画速度:</span>
           <Slider
-            min={100}
-            max={5000}
-            step={100}
+            min={1000}
+            max={10000}
+            step={1000}
             value={[animationSpeed]}
             onValueChange={(value) => setAnimationSpeed(value[0])}
             className="w-64"
           />
-          <span className="ml-2">{animationSpeed}ms</span>
+          <span className="ml-2">{animationSpeed / 1000}秒</span>
+        </div>
+        <div className="mt-2">
+          <span>当前年份: {currentYear}</span>
         </div>
       </div>
     </div>
   )
-}
+})
+
+// 添加显示名称
+GapminderGoRankingComponent.displayName = 'GapminderGoRankingComponent'
+
+export { GapminderGoRankingComponent }
